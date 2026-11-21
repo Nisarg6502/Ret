@@ -33,7 +33,8 @@ void main(){
   float slope=length(gr),rock=at.x,salt=at.y,red=at.z;
   vec2 q=vQ;
   // --- sand
-  vec3 alb=mix(vec3(.60,.47,.33),vec3(.55,.31,.16),red);
+  // sand colour zones: white gypsum -> pale gold -> orange -> iron red
+  vec3 alb=red<.35?mix(vec3(.80,.77,.70),vec3(.63,.50,.35),smoothstep(0.,.35,red)):mix(vec3(.63,.50,.35),vec3(.56,.30,.15),(red-.35)/.65);
   alb*=1.+.06*gn(q*.013)+.04*gn(q*.11);
   float sand=(1.-rock)*(1.-salt);
   // wind ripples: crests across the wind, gentle stoss, steep lee, absent on slip faces and in the lee

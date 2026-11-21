@@ -40,14 +40,14 @@ const cam = { pos: [0, 0, 0], yaw: 0, pitch: 0, vel: [0, 0], vy: 0, onGround: tr
 
 // Spawn on a prominent megadune crest near the origin (highest point relative to its surroundings).
 function findSpawn() {
-  const at = [0, 0, 0, 0];
+  const at = new Array(8).fill(0);
   let best = -1e9, bx = 0, bz = 0;
   for (let i = -12; i <= 12; i++)
     for (let j = -12; j <= 12; j++) {
-      const x = i * 90, z = j * 90, h = terrain(x, z, 1, at);
+      const x = i * 90, z = j * 90, h = terrain(x, z, 64, at);
       if (at[0] > 0.05 || at[1] > 0.1) continue;
       let ring = 0;
-      for (let k = 0; k < 8; k++) ring += terrain(x + Math.cos(k * 0.785) * 350, z + Math.sin(k * 0.785) * 350, 8);
+      for (let k = 0; k < 8; k++) ring += terrain(x + Math.cos(k * 0.785) * 350, z + Math.sin(k * 0.785) * 350, 64);
       const prom = h - ring / 8;
       if (prom > best) (best = prom), (bx = x), (bz = z);
     }
@@ -185,7 +185,7 @@ function updateCamera(dt) {
     p[0] += fx * sp * dt;
     p[2] += fz * sp * dt;
     let g = ground(p[0], p[2]);
-    for (let d = 40; d <= 200; d += 40) g = Math.max(g, terrain(p[0] + fx * d, p[2] + fz * d, 4));
+    for (let d = 40; d <= 200; d += 40) g = Math.max(g, terrain(p[0] + fx * d, p[2] + fz * d, 64) + 8);
     const ty = g + 34;
     p[1] += (ty - p[1]) * Math.min(1, dt * 0.6);
     cam.pitch = -0.075;

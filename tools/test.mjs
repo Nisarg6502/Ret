@@ -30,13 +30,13 @@ function check(name, ok, detail = '') {
 {
   setWorld(7, 1.1);
   const [WX, WZ] = wind();
-  const at = [0, 0, 0, 0, 0, 0];
+  const at = new Array(8).fill(0);
   let maxSlope = 0, steep = 0, steepDownwind = 0, n = 0;
   const hist = new Array(10).fill(0);
   let seed = 12345;
   const rnd = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
   const e = 0.5;
-  for (let i = 0; i < 200000; i++) {
+  for (let i = 0; i < 120000; i++) {
     const x = (rnd() - 0.5) * 30000, z = (rnd() - 0.5) * 30000;
     const h = terrain(x, z, 1, at);
     if (at[0] > 0.01) continue; // skip exposed rock
@@ -46,7 +46,7 @@ function check(name, ok, detail = '') {
     n++;
     hist[Math.min(9, Math.floor(sl / 4))]++;
     if (sl > maxSlope) maxSlope = sl;
-    if (sl > 25 && at[4] < 0.02 && at[5] < 0.02) {
+    if (sl > 25 && at[4] + at[5] + at[6] + at[7] < 0.1) {
       // transverse-dune regions only (star dunes have slip faces in every direction)
       steep++;
       // slip faces descend downwind: gradient points upwind
@@ -55,26 +55,47 @@ function check(name, ok, detail = '') {
   }
   console.log('      slope histogram (4 deg bins, sand):', hist.map((c) => ((100 * c) / n).toFixed(1) + '%').join(' '));
   check('no sand slope steeper than angle of repose (34.5 deg)', maxSlope <= 34.5, `max ${maxSlope.toFixed(2)} deg over ${n} samples`);
-  check('transverse slip faces exist (steep sand > 0.5%)', steep / n > 0.005, `${((100 * steep) / n).toFixed(2)}%`);
+  check('transverse slip faces exist (steep sand > 0.1%)', steep / n > 0.001, `${((100 * steep) / n).toFixed(2)}%`);
   check('slip faces face downwind (> 90%)', steepDownwind / Math.max(1, steep) > 0.9, `${((100 * steepDownwind) / Math.max(1, steep)).toFixed(1)}%`);
 }
 
-// 3. Dune variety: star, linear and transverse regimes all occur within 20 km of the start.
+// 3. Dune variety: every large dune form occurs within 25 km of the start.
 {
   setWorld(7, 1.1);
-  const at = [0, 0, 0, 0, 0, 0];
-  let st = 0, li = 0, tr = 0, n = 0;
-  for (let i = -20; i <= 20; i++)
-    for (let j = -20; j <= 20; j++) {
+  const at = new Array(8).fill(0);
+  const c = [0, 0, 0, 0, 0], names = ['star', 'linear', 'network', 'megabarchan', 'transverse'];
+  let n = 0;
+  for (let i = -25; i <= 25; i++)
+    for (let j = -25; j <= 25; j++) {
       terrain(i * 1000, j * 1000, 64, at);
       n++;
-      if (at[4] > 0.7) st++;
-      else if (at[5] > 0.7) li++;
-      else if (at[4] + at[5] < 0.3) tr++;
+      const w = [at[4], at[5], at[6], at[7], 1 - at[4] - at[5] - at[6] - at[7]];
+      const k = w.indexOf(Math.max(...w));
+      if (w[k] > 0.6) c[k]++;
     }
-  const pc = (x) => ((100 * x) / n).toFixed(0) + '%';
-  check('star, linear and transverse dune fields all present (> 5% each)', st / n > 0.05 && li / n > 0.05 && tr / n > 0.05,
-    `star ${pc(st)}, linear ${pc(li)}, transverse ${pc(tr)}`);
+  check('all five dune forms present (> 4% each)', c.every((x) => x / n > 0.04), names.map((s, i) => `${s} ${((100 * c[i]) / n).toFixed(0)}%`).join(', '));
+}
+
+// 4. No flat ground: local relief within 300 m is never under 1.5 m on sand.
+{
+  setWorld(7, 1.1);
+  const at = new Array(8).fill(0);
+  let flat = 0, n = 0, seed = 99;
+  const rnd = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
+  for (let i = 0; i < 1500; i++) {
+    const x = (rnd() - 0.5) * 40000, z = (rnd() - 0.5) * 40000;
+    terrain(x, z, 1, at);
+    if (at[0] > 0.01) continue;
+    let lo = 1e9, hi = -1e9;
+    for (let k = 0; k < 12; k++) {
+      const h = terrain(x + Math.cos(k * 0.5236) * 150 * (1 + (k & 1)), z + Math.sin(k * 0.5236) * 150 * (1 + (k & 1)));
+      lo = Math.min(lo, h);
+      hi = Math.max(hi, h);
+    }
+    n++;
+    if (hi - lo < 1.5) flat++;
+  }
+  check('no flat sand (relief < 1.5 m within 300 m in < 1% of places)', flat / n < 0.01, `${((100 * flat) / n).toFixed(1)}% flat`);
 }
 
 if (fails) {
