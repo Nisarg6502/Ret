@@ -1,14 +1,26 @@
-# ERG: a procedural desert world in under 90 KB
+# Ret: a procedural desert world in a single small HTML file
 
-Working title. "Erg" is the geographers' word for a sand sea. Rename anytime.
+This is the design and implementation plan. We implement it milestone by milestone.
 
-This is the design and implementation plan. Nothing is built yet. Read it, mark what to change, then we implement milestone by milestone.
+## Decisions (locked on 2026-11-21)
+
+| Topic | Decision |
+|---|---|
+| Name | **Ret** |
+| Graphics API | **WebGL2** |
+| Size cap | **300 KB** raw for now (generous; we still report size every build) |
+| Sky | **Ringed planet with one moon** |
+| Camera | **Both**: first person and third person, toggle at any time. Third person shows a cloaked figure whose cape is a wind-driven cloth simulation |
+| Traversal | **Walk only** (sandboard and glider dropped) |
+| Hosting | **GitHub Pages**, built and deployed by a GitHub Actions workflow |
+
+Sections below are updated to match. Anything about the sandboard or glider is out of scope.
 
 ---
 
 ## 0. One-paragraph summary
 
-A single HTML file, at most **90 KB raw**, with **zero assets and zero network requests**, that renders an endless, explorable desert planet in the browser on **phones and PCs**. Everything (terrain, sky, sand, weather, plants, ruins, creatures, sound, music) is generated from math at runtime. The twist that makes it ours: the world is driven by **one coupled physical simulation**. The sun heats the ground, the heat drives thermals, dust devils, mirages and the daily wind cycle, the wind moves sand only above the real transport threshold, and dust thrown into the air changes the colour of the sky. Nothing is hand-animated where physics can cause it. You can **walk, sandboard down slip faces, and soar on a glider using real thermals**.
+A single HTML file, at most **300 KB raw** (90 KB was the original stretch target), with **zero assets and zero network requests**, that renders an endless, explorable desert planet in the browser on **phones and PCs**. Everything (terrain, sky, sand, weather, plants, ruins, creatures, sound, music) is generated from math at runtime. The twist that makes it ours: the world is driven by **one coupled physical simulation**. The sun heats the ground, the heat drives thermals, dust devils, mirages and the daily wind cycle, the wind moves sand only above the real transport threshold, and dust thrown into the air changes the colour of the sky. Nothing is hand-animated where physics can cause it. You explore **on foot**, in first or third person, as a cloaked figure whose cape streams in the real wind.
 
 ---
 
@@ -22,14 +34,14 @@ A single HTML file, at most **90 KB raw**, with **zero assets and zero network r
 - Claimed 180 FPS on an RTX 5070 Ti.
 - Sources: [TweakTown](https://www.tweaktown.com/news/114695/claude-fable-5-2-builds-a-swimmable-underwater-world-in-a-single-97kb-html-file/index.html), [Instalki](https://www.instalki.pl/news/software/claude-stworzyl-podwodny-swiat-szokuje-detalami-a-zajmuje-96-kb/), [ProfesionalReview](https://www.profesionalreview.com/2026/11/16/fable-5-2-mundo-submarino-96-kb/amp/). (I could only read search summaries; the article pages are blocked from this environment.)
 
-**Where ERG aims higher**
+**Where Ret aims higher**
 
-| Axis | Abyssal Garden | ERG target |
+| Axis | Abyssal Garden | Ret target |
 |---|---|---|
-| Size | ~97 KB | **≤ 90 KB raw**, size gate in the build |
+| Size | ~97 KB | **≤ 300 KB raw** cap, size reported on every build |
 | Reach | WebGPU only | **WebGL2**: virtually every phone and PC browser |
 | Motion | scripted/animated life | **simulated**: causes produce effects |
-| Traversal | swim | **walk, sandboard, glide** (3 physics models) |
+| Traversal | swim | **walk** with real sand physics, first and third person with a wind-driven cloth cape |
 | Time | static scene | full **day/night**, seasons, **weather events** |
 | Variety | one world | **shareable seeds** that also change planet parameters |
 
@@ -66,7 +78,7 @@ A single HTML file, at most **90 KB raw**, with **zero assets and zero network r
 
 **Hard constraints**
 
-- One file: `dist/index.html`, **≤ 90 KB raw bytes** (the headline number; gzip/brotli reported too).
+- One file: `dist/index.html`, **≤ 300 KB raw bytes** (the headline number; gzip/brotli reported too).
 - No external requests at all: no CDN, no fonts, no images, no audio files. Works offline, even opened from disk.
 - Runs in current Chrome, Edge, Safari (macOS and iOS), Firefox, Samsung Internet.
 
@@ -88,7 +100,7 @@ A single HTML file, at most **90 KB raw**, with **zero assets and zero network r
 4. Below the threshold wind (about 5 to 6 m/s at 2 m height) no sand moves.
 5. Sunset reds, blue hour and dust-storm orange all **emerge** from scattering math, never from hand-tuned gradients.
 6. Mirages appear only on hot flat ground near midday, in a band about 0.3 to 0.4° below the horizon.
-7. A paraglider loses about 1 m of height per 8 to 10 m flown in still air.
+7. The cape and grass respond to the same gusts that move the sand.
 
 ---
 
@@ -125,7 +137,7 @@ A single HTML file, at most **90 KB raw**, with **zero assets and zero network r
         |              +--------------------------+------------------+----------------+
         |              v                          v                  v                v
         |          THERMALS                  DUST DEVILS       MIRAGE + SHIMMER   DAILY WIND CYCLE
-        |       (glider lift, birds)                                                  |
+        |       (soaring birds)                                                       |
         v                                                                             v
  ATMOSPHERE <---- dust load <---- SALTATION / DUST FLUX <---- friction velocity u* <-- WIND FIELD
  (sky colour,                         |                                            (gusts, terrain
@@ -142,7 +154,7 @@ One small CPU "climate" module owns the global state (sun vector, air and ground
 - `input`: keyboard/mouse, touch joystick, gyro, gamepad, unified into one action state.
 - `climate`: ephemeris, temperatures, wind, weather scheduler.
 - `world`: height function (GLSL + identical JS port), clipmap streaming, prop placement.
-- `sim`: player, sandboard, glider, tumbleweeds, birds, particles.
+- `sim`: player, cape cloth, tumbleweeds, birds, particles.
 - `render`: the frame graph below.
 - `audio`: synthesis graph driven by `climate` and `sim`.
 - `ui`: intro, HUD, menu, photo mode, share link.
@@ -225,7 +237,7 @@ All units are SI. Default constants: g = 9.81 m/s², air density ρa = 1.15 kg/m
 
 - Rankine vortex: solid-body core, `vθ = Γ / (2πr)` outside; inflow at the ground, updraft in the core.
 - Spawn only on hot afternoons, low mean wind, flat sun-baked ground; drift with the mean wind; diameters 2 to 30 m, heights up to several hundred metres, life of a few minutes.
-- They lift saltation and dust particles and add density to the volumetric pass. Gliders can use them: they mark strong thermals.
+- They lift saltation and dust particles and add density to the volumetric pass. Vultures circle in the thermals they mark.
 
 ### 6.8 Haboob (dust storm)
 
@@ -242,11 +254,10 @@ All units are SI. Default constants: g = 9.81 m/s², air density ρa = 1.15 kg/m
 ### 6.10 Movement physics
 
 - **Walking**: speed reduced on soft sand and uphill; on slopes above ~30° the sand gives way and you slide back while climbing (as on real slip faces); descending a slip face triggers a grain-flow avalanche and the booming-dune sound.
-- **Sandboarding**: `a = g (sin θ − μk cos θ) − drag`, μk ≈ 0.35 for a waxed board. Rideable only above ~19°, which means slip faces, exactly like real sandboarding. Carving by edge angle, spray particles, jumps off crests.
-- **Glider (paraglider)**: polar curve (trim ~11 m/s, min sink ~1.1 m/s, glide ratio 8 to 10), banking turns with load factor, stall at low speed.
-  - **Thermals**: positioned over sun-heated slopes and flats, strength from the surface temperature, rising 1 to 5 m/s, spacing about 2.5× the boundary-layer depth.
-  - **Ridge lift**: `w ≈ U sin θ` on windward faces of large dunes and mesas.
-  - **Vario**: a beeping variometer whose pitch rises with climb rate, as real pilots use.
+- **Sliding**: on a slip face you can sit and slide: `a = g (sin θ − μk cos θ)` with μk ≈ 0.6 for cloth on dry sand, so you only slide on the steepest faces.
+- **Camera**: first person (head bob tied to the step cycle) or third person (orbit camera that avoids terrain). Toggle at any time.
+- **Cape**: a small Verlet cloth (about 10 × 14 particles) pinned at the shoulders, driven by gravity, the local wind and gusts with aerodynamic drag per triangle `F = ½ ρa Cd A ((u − v)·n) n`, with distance constraints and terrain collision. Same wind field as the sand.
+- **Thermals** still exist (over sun-heated slopes and flats, rising 1 to 5 m/s): vultures circle in them and dust devils form in them.
 - **Tumbleweeds**: rigid bodies with drag `F = ½ ρa Cd A |u − v|(u − v)` (Cd ≈ 0.8, mass ~0.3 kg), gravity, bouncing and rolling on the heightfield.
 
 ### 6.11 Vegetation response
@@ -333,8 +344,7 @@ All units are SI. Default constants: g = 9.81 m/s², air density ρa = 1.15 kg/m
 | Sand hiss | high-passed noise | local saltation flux |
 | Footsteps | short filtered noise grains, different for sand, rock, salt crust | step cycle |
 | Booming dune | ~80 Hz drone with harmonics and slow beating | sliding on slip faces |
-| Board and glider rush | filtered noise ∝ speed² | speed |
-| Vario | beeps, pitch ∝ climb rate | glider |
+| Cape flutter | amplitude-modulated noise | cloth speed relative to wind |
 | Thunder | low-passed noise bursts, delayed by distance / c(T) | lightning |
 | Birds | occasional FM-synth cries | vultures |
 | Music (toggleable) | sparse Karplus-Strong plucks in a Hijaz mode over a drone, density follows time of day | clock |
@@ -351,9 +361,8 @@ All units are SI. Default constants: g = 9.81 m/s², air density ρa = 1.15 kg/m
 | Look | mouse (pointer lock) | drag on the right half; optional gyro | right stick |
 | Run | Shift | push the joystick to the edge | left trigger |
 | Jump | Space | Jump button | A |
-| Sandboard on/off | B | Board button | B |
-| Glider (when airborne) | Space again | Glide button appears | A again |
-| Steer board / bank glider | A/D or mouse | joystick | left stick |
+| First / third person | C | camera button | Y |
+| Sit and slide (on slip faces) | Ctrl | Slide button | B |
 | Time faster / slower / pause | ] / [ / \ | menu slider | D-pad |
 | Photo mode (free cam, zoom, exposure) | P | camera icon | View |
 | Hide HUD / fullscreen / mute | H / F / M | buttons in menu | |
@@ -366,9 +375,9 @@ All units are SI. Default constants: g = 9.81 m/s², air density ρa = 1.15 kg/m
 
 ## 10. Website experience
 
-1. **Landing = attract mode**: the world is already rendering behind the title, a slow cinematic flight over the dunes at golden hour. Title "ERG", one line of subtitle, an **Enter** button (also unlocks audio and pointer lock).
+1. **Landing = attract mode**: the world is already rendering behind the title, a slow cinematic flight over the dunes at golden hour. Title "Ret", one line of subtitle, an **Enter** button (also unlocks audio and pointer lock).
 2. **Short control hint** that fades after a few seconds (different for touch and mouse).
-3. **Minimal HUD**: compass strip with wind arrow, local solar time, wind in m/s and Beaufort, sand temperature. Altitude and vario only while gliding.
+3. **Minimal HUD**: compass strip with wind arrow, local solar time, wind in m/s and Beaufort, sand temperature.
 4. **Menu drawer**: quality, time speed, sound and music, sensitivity, gyro, trigger a dust storm, planet parameters (advanced).
 5. **Share**: the URL holds seed, position, time and heading (`#s=…&p=…&t=…`). Every seed is a different planet: dune regime, sand colour, dust optics, ring tilt, latitude. Advanced mode can change gravity, air density and star temperature, and the physics follows (lower gravity = higher saltation hops and bigger dunes).
 6. **Idle**: after 60 s without input the camera drifts into cinematic mode.
@@ -393,6 +402,8 @@ Start on Medium, measure for 3 s, settle on a tier; dynamic resolution then hold
 
 ## 12. Size budget (minified, raw bytes)
 
+The cap is now **300 KB**. The table below was the 90 KB budget; it stays as a guide for keeping each module lean, and the build reports per-module sizes so we can see where bytes go.
+
 | Module | Budget |
 |---|---|
 | Shell: HTML, CSS, HUD, menu, intro | 4 KB |
@@ -407,12 +418,12 @@ Start on Medium, measure for 3 s, settle on a tier; dynamic resolution then hold
 | Volumetric storms | 4 KB |
 | Props and landmarks | 9 KB |
 | Fauna: vultures, tracks | 2 KB |
-| Movement physics: walk, board, glider, tumbleweeds | 6 KB |
+| Movement physics: walk, slide, cape cloth, tumbleweeds | 6 KB |
 | Post: exposure, bloom, AgX, mirage, shimmer, TAA, grain | 4 KB |
 | Audio and music | 5 KB |
 | **Subtotal** | **84 KB** |
 | Reserve | 6 KB |
-| **Hard cap** | **90 KB** |
+| **Original stretch cap** | **90 KB** |
 
 **How we stay small**
 
@@ -421,7 +432,7 @@ Start on Medium, measure for 3 s, settle on a tier; dynamic resolution then hold
 - Shared GLSL chunks assembled at runtime, never duplicated in the file.
 - All geometry generated at runtime: no vertex data in the file.
 - One noise toolbox reused by terrain, wind, particles, clouds and audio.
-- The build prints a per-module size table and **fails above 90 KB**.
+- The build prints a per-module size table and **fails above 300 KB**.
 - The headline number is the honest raw file. A compressed self-extracting build (via `DecompressionStream`) is possible as an extra, not as the main claim.
 
 ---
@@ -433,7 +444,7 @@ PLAN.md
 README.md
 package.json          dev dependency: esbuild only
 tools/
-  build.mjs           bundle, minify JS + GLSL, inline into one HTML, size report, 90 KB gate
+  build.mjs           bundle, minify JS + GLSL, inline into one HTML, size report, 300 KB gate
   glsl-min.mjs
   shots.mjs           Playwright screenshots at fixed seeds/times for visual regression
 src/
@@ -443,7 +454,7 @@ src/
   input/              keyboard-mouse, touch, gyro, gamepad
   climate/            sun, temperature, wind, weather
   world/              height (JS port), clipmap, props, landmarks
-  sim/                player, board, glider, tumbleweeds, birds, particles
+  sim/                player, cape, tumbleweeds, birds, particles
   render/             passes (terrain, sky, particles, volume, post)
   audio/
   ui/
@@ -452,7 +463,7 @@ dist/
   index.html          THE deliverable
 ```
 
-Optional: GitHub Pages deployment of `dist/` from this repo.
+GitHub Pages: `.github/workflows/pages.yml` builds on every push to `main` and deploys `dist/`. One-time setup: repository Settings, Pages, Source: GitHub Actions.
 
 ---
 
@@ -469,17 +480,17 @@ Each milestone ends with a playable build, screenshots, a size report, and your 
 | M4 | Wind and sand | climate model, wind field, saltation and dust particles, tracks, ripple migration, grass | no sand moves below threshold; gusts sweep streamers; tracks fill in | ~50 KB |
 | M5 | Weather | dust devils, haboob + volumetrics, dry lightning, shimmer, mirage, dust-coupled sky | haboob turns sun copper, visibility < 100 m; mirage only on hot flats | ~60 KB |
 | M6 | Places | rocks with strata, yardangs, mushroom rocks, ruins, colossus, ribcage, obelisk sundial, dead-tree pan, acacias, tumbleweeds | sundial reads correct solar time | ~70 KB |
-| M7 | Board and glider | sandboard, glider polar, thermals, ridge lift, vultures, vario | can climb in thermals; glide ratio 8 to 10 | ~75 KB |
+| M7 | Character | third-person cloaked figure, cape cloth simulation, camera toggle and terrain-aware orbit camera, sit-and-slide, vultures in thermals | cape streams downwind and snaps in gusts | ~75 KB |
 | M8 | Sound | full audio graph and music | every sound has a physical driver | ~80 KB |
 | M9 | Night and rings | moon phases, rings with shadows, Milky Way, Purkinje shift | ring shadow band appears in the right season | ~84 KB |
-| M10 | Polish | quality tiers, intro, HUD, menu, photo mode, share links, planet parameters, accessibility, device testing, size crunch, deploy | ≤ 90 KB, targets met on your phone and PC | ≤ 90 KB |
+| M10 | Polish | quality tiers, intro, HUD, menu, photo mode, share links, planet parameters, accessibility, device testing, deploy | ≤ 300 KB, targets met on your phone and PC | ≤ 300 KB |
 
 ---
 
 ## 15. Testing and verification
 
 - **Visual regression**: headless Chromium + Playwright screenshots at fixed seeds and times (dawn, noon, sunset, night, storm, glide), at desktop and phone viewports.
-- **Physics checks**: sun position vs reference values; slope histogram of generated terrain; GLSL vs JS height parity; zero flux below threshold; glide ratio from a scripted flight.
+- **Physics checks**: sun position vs reference values; slope histogram of generated terrain; GLSL vs JS height parity; zero flux below threshold.
 - **Performance**: frame-time logging per pass in a debug overlay (GPU timer queries where available).
 - **Real devices**: I cannot run your phone from here, so at milestones M0, M2, M5 and M10 you open the build on your phone and PC and report FPS and feel.
 - **Size gate** on every build.
@@ -492,7 +503,7 @@ Each milestone ends with a playable build, screenshots, a size report, and your 
 |---|---|
 | Phones too slow for volumetrics and particles | tiers, quarter-res volumetrics, dynamic resolution, storms-only volumetrics on Low |
 | Float render targets missing or unfilterable | `RGBA16F` fallback; `texelFetch` instead of filtering |
-| Size creep | per-module budgets, build gate, reserve of 6 KB, cut list ready (oasis, tumbleweeds, music, cirrus) |
+| Size creep | per-module size report, 300 KB build gate |
 | Aliasing of ripples and glints | footprint-aware filtering, fade to average shading, light TAA |
 | Shader compile stalls on load | parallel compile during the intro, small shader count |
 | Dune shapes looking synthetic | two-scale compound dunes, domain warping, optional avalanche relaxation |
@@ -501,12 +512,6 @@ Each milestone ends with a playable build, screenshots, a size report, and your 
 
 ---
 
-## 17. Decisions for you (my recommendation first)
+## 17. Decisions
 
-1. **Graphics API**: WebGL2 for maximum phone reach (recommended), or WebGPU to match the reference.
-2. **Size cap**: 90 KB raw hard cap (recommended), or allow up to 100 KB for more features.
-3. **Signature sky**: ringed planet with one moon (recommended), or a plain Earth-like sky.
-4. **Camera**: first person with board and glider visible at the edges (recommended, cheapest), or third person with a cloaked figure whose cape is a wind-driven cloth simulation (+~2 KB).
-5. **Traversal scope**: walk + sandboard + glider (recommended), or walk only to save ~4 KB for more scenery.
-6. **Name**: keep "ERG" or choose another.
-7. **Hosting**: GitHub Pages from this repo, or you host the single file yourself.
+All resolved; see the table at the top of this document.
