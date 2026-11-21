@@ -40,7 +40,7 @@ void main(){
   float ph=6.2831853*(u/.11+2.2*gn(vec2(u,v)*.37)+.7*gn(vec2(u,v)*1.9));
   float fw=fwidth(ph);
   float lee=dot(gr,W);
-  float rm=sand*(1.-smoothstep(.2,.36,slope))*smoothstep(-.32,-.12,lee)*(1.-smoothstep(1.2,3.,fw));
+  float rm=sand*(1.-smoothstep(.2,.36,slope))*smoothstep(-.32,-.12,lee)*(1.-smoothstep(.8,2.,fw));
   if(rm>0.){
     float A=.0045*rm*(.6+.6*gn(q*.08));
     float dh=cos(ph)-.5*cos(2.*ph);
@@ -49,7 +49,7 @@ void main(){
     alb*=1.-.13*rm*max(.3-(sin(ph)-.25*sin(2.*ph)),0.);
   }
   // coarse megaripples in flat interdunes
-  float mr=sand*(1.-smoothstep(.04,.12,slope))*(1.-at.w)*(1.-smoothstep(.8,2.,fwidth(u/1.6)));
+  float mr=sand*(1.-smoothstep(.04,.12,slope))*(1.-at.w)*(1.-smoothstep(.12,.35,fwidth(u/1.6)));
   if(mr>0.){
     float p2=6.2831853*(u/1.6+.6*gn(vec2(u,v)*.05));
     vec2 g=.06*mr*(cos(p2)-.5*cos(2.*p2))*3.927*W;

@@ -275,11 +275,9 @@ function boot() {
   buildCompass();
   spawn = findSpawn();
   const sp = sunPosition(clock.lat, clock.day, clock.hours);
-  // look along the crest line, on the side nearer the sun (low sun to the side, long shadows)
-  const yw = Math.atan2(WIND[0], -WIND[1]), da = (a) => Math.abs(Math.atan2(Math.sin(a - sp.azim), Math.cos(a - sp.azim)));
-  const crest = da(yw + Math.PI / 2) < da(yw - Math.PI / 2) ? yw + Math.PI / 2 : yw - Math.PI / 2;
-  cam.yaw = num('yaw', crest + (da(crest) < 0.6 ? 0.5 * Math.sign(Math.sin(yw - crest)) : 0));
-  cam.pitch = num('pitch', -0.1);
+  // start facing roughly 50 degrees right of the low sun: rim-lit arms, long shadows across the field
+  cam.yaw = num('yaw', sp.azim - 0.85);
+  cam.pitch = num('pitch', -0.13);
   if (SHOT) {
     const x = num('x', spawn[0]), z = num('z', spawn[1]);
     cam.mode = Q.mode || 'walk';

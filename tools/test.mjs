@@ -30,13 +30,13 @@ function check(name, ok, detail = '') {
 {
   setWorld(7, 1.1);
   const [WX, WZ] = wind();
-  const at = [0, 0, 0, 0];
+  const at = [0, 0, 0, 0, 0];
   let maxSlope = 0, steep = 0, steepDownwind = 0, n = 0;
   const hist = new Array(10).fill(0);
   let seed = 12345;
   const rnd = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
   const e = 0.5;
-  for (let i = 0; i < 60000; i++) {
+  for (let i = 0; i < 200000; i++) {
     const x = (rnd() - 0.5) * 30000, z = (rnd() - 0.5) * 30000;
     const h = terrain(x, z, 1, at);
     if (at[0] > 0.01) continue; // skip exposed rock
@@ -46,7 +46,8 @@ function check(name, ok, detail = '') {
     n++;
     hist[Math.min(9, Math.floor(sl / 4))]++;
     if (sl > maxSlope) maxSlope = sl;
-    if (sl > 25) {
+    if (sl > 25 && at[4] < 0.02) {
+      // transverse-dune regions only (star dunes have slip faces in every direction)
       steep++;
       // slip faces descend downwind: gradient points upwind
       if ((gx * WX + gz * WZ) / Math.hypot(gx, gz) < -0.3) steepDownwind++;
@@ -54,7 +55,7 @@ function check(name, ok, detail = '') {
   }
   console.log('      slope histogram (4 deg bins, sand):', hist.map((c) => ((100 * c) / n).toFixed(1) + '%').join(' '));
   check('no sand slope steeper than angle of repose (34.5 deg)', maxSlope <= 34.5, `max ${maxSlope.toFixed(2)} deg over ${n} samples`);
-  check('slip faces exist (steep sand > 0.5%)', steep / n > 0.005, `${((100 * steep) / n).toFixed(2)}%`);
+  check('transverse slip faces exist (steep sand > 0.5%)', steep / n > 0.005, `${((100 * steep) / n).toFixed(2)}%`);
   check('slip faces face downwind (> 90%)', steepDownwind / Math.max(1, steep) > 0.9, `${((100 * steepDownwind) / Math.max(1, steep)).toFixed(1)}%`);
 }
 

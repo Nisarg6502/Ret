@@ -11,10 +11,12 @@ See [PLAN.md](PLAN.md) for the full design and the milestone plan.
   mineral dust layer whose iron oxides absorb blue light. Sunsets, the blue hour and the hazy
   ochre horizon come out of the scattering maths, not from painted gradients.
 - **Sun** placed by a real solar ephemeris for any latitude, day and time; limb-darkened disc.
-- **Dunes** shaped like real ones: gentle windward slopes, slip faces at the angle of repose
-  (never steeper than 34°), crests that break into crescents with horns pointing downwind, and
-  smaller dunes riding on megadunes. Rock plateaus with layered sandstone and salt flats with
-  cracked crusts.
+- **Dunes** shaped like real ones: transverse megadunes 60 to 200 m tall with gentle windward
+  slopes steepening into a sharp brink, slip faces at the angle of repose (never steeper than
+  34°), crests that wander and break into crescents with horns pointing downwind, smaller dunes
+  riding on the megadunes, and star dunes (200 to 300 m pyramids with radiating sharp-crested arms)
+  where the wind is multidirectional. Rock plateaus with layered sandstone, and white salt pans on
+  interdune floors.
 - **Sand** with wind ripples across the wind, darker heavy minerals in ripple troughs, grain
   flow on slip faces, the bright "opposition" glow away from the sun, and sparkling quartz grains.
 - **Endless terrain** streamed with geometry clipmaps out to about 16 km, with soft sun shadows
