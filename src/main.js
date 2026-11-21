@@ -4,9 +4,12 @@ import { createTerrain } from './terrain.js';
 import { createAtmosphere } from './atmosphere.js';
 import { createPost } from './post.js';
 import { initInput, enableInput, poll, state } from './input.js';
-import { sunPosition, celestialMatrix } from './sun.js';
-import { setWorld, terrain, ground, wind } from './world.js';
-import { viewProj, inv4, clamp, rng } from './math.js';
+import { sunPosition, celestialMatrix, moonPosition, polarAxis, declination } from './sun.js';
+import { setWorld, terrain, ground, wind, gn, ringTau } from './world.js';
+import { viewProj, inv4, clamp, rng, basis, smooth } from './math.js';
+import { createClimate } from './climate.js';
+import { createParticles } from './particles.js';
+import { initAudio, updateAudio, footstep, toggleMute, resumeAudio } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const Q = Object.fromEntries(
@@ -26,9 +29,10 @@ const R = rng(seed * 7919 + 13);
 const windAngle = R() * Math.PI * 2;
 setWorld(seed, windAngle);
 const WIND = wind();
-const clock = { day: num('d', 300), hours: num('t', 16.9), lat: num('lat', 23.5), speed: num('speed', SHOT ? 0 : 30) };
-const SPEEDS = [0, 1, 10, 30, 120, 600];
-const dust = num('dust', 0.09);
+const clock = { day: num('d', 172), hours: num('t', 17.9), lat: num('lat', 23.5), speed: num('speed', SHOT ? 0 : 30) };
+const SPEEDS = [0, 1, 10, 30, 120, 600, 1800, 3600];
+let shadowBoost = 0;
+const DUST = Q.dust !== undefined ? num('dust', 0.09) : null; // fixed dust if given, else from the climate
 const EYE = 1.65;
 
 // ---- camera / player
@@ -36,14 +40,14 @@ const cam = { pos: [0, 0, 0], yaw: 0, pitch: 0, vel: [0, 0], vy: 0, onGround: tr
 
 // Spawn on a prominent megadune crest near the origin (highest point relative to its surroundings).
 function findSpawn() {
-  const at = [0, 0, 0, 0];
+  const at = new Array(8).fill(0);
   let best = -1e9, bx = 0, bz = 0;
   for (let i = -12; i <= 12; i++)
     for (let j = -12; j <= 12; j++) {
-      const x = i * 90, z = j * 90, h = terrain(x, z, 1, at);
+      const x = i * 90, z = j * 90, h = terrain(x, z, 64, at);
       if (at[0] > 0.05 || at[1] > 0.1) continue;
       let ring = 0;
-      for (let k = 0; k < 8; k++) ring += terrain(x + Math.cos(k * 0.785) * 350, z + Math.sin(k * 0.785) * 350, 8);
+      for (let k = 0; k < 8; k++) ring += terrain(x + Math.cos(k * 0.785) * 350, z + Math.sin(k * 0.785) * 350, 64);
       const prom = h - ring / 8;
       if (prom > best) (best = prom), (bx = x), (bz = z);
     }
@@ -59,7 +63,7 @@ function findSpawn() {
   return [bx, bz];
 }
 
-let canvas, terr, atm, post, hdr = null, dyn = 1, ready = false, started = false;
+let canvas, terr, atm, post, parts, clim, hdr = null, stepDist = 0, dyn = 1, ready = false, started = false;
 let last = 0, time = 0, frames = 0, ftAcc = 0, ftN = 0, hudOn = true;
 let spawn = [0, 0];
 
@@ -95,18 +99,33 @@ function action(a) {
     i = a === 'faster' ? Math.min(i + 1, SPEEDS.length - 1) : a === 'slower' ? Math.max(i - 1, 0) : (i + 1) % SPEEDS.length;
     clock.speed = SPEEDS[i];
     toast(clock.speed ? `Time ×${clock.speed}` : 'Time paused');
-  } else if (a === 'pause') {
+  } else if (a === 'skip') skipTime();
+  else if (a === 'pause') {
     clock.speed = clock.speed ? 0 : 30;
     toast(clock.speed ? 'Time ×30' : 'Time paused');
-  } else if (a === 'touchmode' && started) showHint();
+  } else if (a === 'mute') toast(toggleMute() ? 'Sound off' : 'Sound on');
+  else if (a === 'touchmode' && started) showHint();
   else if (a === 'camera') toast('Third person arrives with the character milestone');
+}
+
+// Jump to the next notable moment of the day (sunrise and sunset from the declination).
+function skipTime() {
+  const phi = (clock.lat * Math.PI) / 180, dec = declination(clock.day);
+  const H0 = (Math.acos(clamp(-Math.tan(phi) * Math.tan(dec), -1, 1)) * 12) / Math.PI, rise = 12 - H0, set = 12 + H0;
+  const moments = [[rise + 0.3, 'Sunrise'], [rise + 1.6, 'Morning'], [12.5, 'Midday heat'], [15.2, 'Afternoon wind'],
+    [set - 0.8, 'Golden hour'], [set + 0.3, 'Dusk'], [23.5, 'Night']];
+  let next = moments.find(([h]) => h > clock.hours + 0.05);
+  if (!next) (next = moments[0]), (clock.day = (clock.day % 365) + 1);
+  clock.hours = next[0];
+  shadowBoost = 2;
+  toast(`${next[1]}  ${hhmm(next[0])}`);
 }
 
 function showHint() {
   toast(
     state.touch
-      ? 'Left thumb moves · right thumb looks · TILT for gyro look'
-      : 'WASD move · mouse look · Shift run · Space jump · V fly · [ ] time · H hide HUD',
+      ? 'Left thumb moves · right thumb looks · TIME speed · SKIP ahead · TILT gyro'
+      : 'WASD move · mouse look · Shift run · Space jump · V fly · [ ] time speed · T skip ahead · H hide HUD',
     7000
   );
 }
@@ -131,6 +150,8 @@ function enter() {
   cam.pos = [spawn[0], ground(spawn[0], spawn[1]) + EYE, spawn[1]];
   cam.vel = [0, 0];
   enableInput(true);
+  initAudio();
+  resumeAudio();
   if (TOUCH) document.documentElement.requestFullscreen?.().catch(() => {});
   else canvas.requestPointerLock?.();
   showHint();
@@ -164,7 +185,7 @@ function updateCamera(dt) {
     p[0] += fx * sp * dt;
     p[2] += fz * sp * dt;
     let g = ground(p[0], p[2]);
-    for (let d = 40; d <= 200; d += 40) g = Math.max(g, terrain(p[0] + fx * d, p[2] + fz * d, 4));
+    for (let d = 40; d <= 200; d += 40) g = Math.max(g, terrain(p[0] + fx * d, p[2] + fz * d, 64) + 8);
     const ty = g + 34;
     p[1] += (ty - p[1]) * Math.min(1, dt * 0.6);
     cam.pitch = -0.075;
@@ -188,6 +209,10 @@ function updateCamera(dt) {
   cam.vel[1] += (tz - cam.vel[1]) * k;
   p[0] += cam.vel[0] * dt;
   p[2] += cam.vel[1] * dt;
+  if (cam.onGround) {
+    stepDist += Math.hypot(cam.vel[0], cam.vel[1]) * dt;
+    if (stepDist > (run ? 1.3 : 0.75)) (stepDist = 0), footstep(run ? 1 : 0.7);
+  }
   const g = ground(p[0], p[2]) + EYE;
   if (cam.onGround) {
     if (jump) (cam.vy = 3.6), (cam.onGround = false);
@@ -205,7 +230,7 @@ function frame(now) {
   const dt = Math.min(0.1, last ? (now - last) / 1000 : 0.016);
   last = now;
   if (!ready) {
-    if (![...terr.progs, ...atm.progs, ...post.progs].every((p) => p.ready())) return;
+    if (![...terr.progs, ...atm.progs, ...post.progs, ...parts.progs].every((p) => p.ready())) return;
     ready = true;
   }
   time += dt;
@@ -225,27 +250,75 @@ function frame(now) {
   }
   resize();
 
-  const sp = sunPosition(clock.lat, clock.day, clock.hours);
-  const sun = sp.dir;
+  const sp = sunPosition(clock.lat, clock.day, clock.hours), sun = sp.dir;
+  const mp = moonPosition(clock.lat, clock.day, clock.hours), moon = mp.dir;
+  clim.update(dt, clock.speed * dt, clock.day, clock.hours, sun);
+  const dust = DUST ?? clim.dust;
+  // sunlight reaching the ground through the rings (their shadow band, seasonal)
+  const pole = polarAxis(clock.lat), mus = sun[0] * pole[0] + sun[1] * pole[1] + sun[2] * pole[2];
+  let sunK = 1;
+  const rt = (-6360 * pole[1]) / mus;
+  if (rt > 0 && isFinite(rt)) {
+    const P = [sun[0] * rt, sun[1] * rt + 6360, sun[2] * rt];
+    sunK = Math.exp(-ringTau(Math.hypot(P[0], P[1], P[2]) / 6360) / Math.max(Math.abs(mus), 0.02));
+  }
+  // key light: sun by day, moon by night (terrain shadows and aerial perspective follow it)
+  const keyMoon = sun[1] < -0.04 && moon[1] > 0;
+  const keyDir = keyMoon ? moon : sun;
+  // pre-exposure: keep the half-float HDR buffer in range from noon to a moonless night
+  const lumEst = Math.max(sun[1], 0) * 0.3 * sunK + 0.02 * Math.exp(40 * Math.min(sun[1], 0)) + mp.illum * Math.max(moon[1], 0.05) * 0.3 + 3e-9;
+  const pe = 0.25 / lumEst;
   const aspect = hdr.w / hdr.h;
   const fovY = aspect >= 1 ? 1.05 : Math.min(1.9, 2 * Math.atan(Math.tan(0.62) / aspect));
   const VP = viewProj(cam.yaw, cam.pitch, fovY, aspect, 0.15, 150000);
   const IVP = inv4(VP);
 
-  terr.update(cam.pos, sun, seed, WIND, frames === 0 ? 9 : 1);
-  const u = atm.update(sun, cam.pos[1], dust, IVP);
+  terr.update(cam.pos, keyDir, seed, WIND, frames === 0 || shadowBoost-- > 0 ? 9 : clock.speed >= 600 ? 3 : 1);
+  const u = atm.update(sun, moon, sunK, mp.illum, cam.pos[1], dust, IVP, keyMoon);
+  const anchor = terr.anchor();
+  parts.update(dt, cam.pos, terr.level(0), terr.level(1), anchor, clim, time, seed);
+  const cloudU = { uCOff: clim.cloudOff, uCamKm: [cam.pos[0] / 1000, cam.pos[2] / 1000], uCCov: clim.cloudCov };
+
+  // mirage: critical angle from the refractive index difference (Gladstone-Dale) between the air
+  // touching the ground and the air at eye height
+  const dn = 2.93e-4 * 273.15 * (1 / (clim.tAir + 273.15) - 1 / (clim.tSurf + 273.15));
+  const mirC = Math.sqrt(2 * Math.max(dn, 0)) * 3.5; // drawn ~3.5x the physical angle so it reads on screens
 
   bindTarget(hdr);
   gl.enable(gl.DEPTH_TEST);
   gl.depthFunc(gl.LEQUAL);
   gl.clearDepth(1);
   gl.clear(gl.DEPTH_BUFFER_BIT);
-  terr.draw(VP, cam.pos, { ...u, uRes: [hdr.w, hdr.h], uWind: WIND, uSeed: seed });
+  terr.draw(VP, cam.pos, {
+    ...u, ...cloudU, uRes: [hdr.w, hdr.h], uWind: WIND, uSeed: seed, uKey: keyMoon ? 1 : 0, uPE: pe,
+    uWd: clim.dir, uU10: clim.u10, uUs: clim.ustar, uTime: time, uRip: clim.ripple, uMirC: mirC,
+  });
   gl.depthMask(false);
-  atm.drawSky(IVP, celestialMatrix(clock.lat, clock.day, clock.hours), time, fovY / hdr.h, 120);
+  atm.drawSky(IVP, {
+    ...cloudU, uCel: celestialMatrix(clock.lat, clock.day, clock.hours), uPole: pole, uTime: time,
+    uPix: fovY / hdr.h, uStarK: 120, uPE: pe, uSeed: seed,
+  });
+  // particles: light from the sun and moon at the camera (Kasten-Young air mass for transmittance)
+  const trans = (y) => {
+    if (y < -0.02) return [0, 0, 0];
+    const el = Math.asin(Math.max(y, 0)) * 57.3, m = 1 / (Math.max(y, 0) + 0.15 * Math.pow(el + 3.885, -1.253));
+    return [0.046, 0.108, 0.265].map((r) => Math.exp(-(r + 0.01 + dust) * m));
+  };
+  const ts = trans(sun[1]), tm = trans(moon[1]), sk = Math.max(sun[1] + 0.05, 0) * sunK;
+  const bs = basis(cam.yaw, cam.pitch);
+  parts.draw(VP, cam.pos, bs, {
+    uSunD: sun, uMoonD: moon, uLs: ts.map((v) => v * sunK), uLm: tm.map((v) => v * mp.illum),
+    uAmb: [0.05 * sk + 2e-9 + 0.1 * mp.illum, 0.07 * sk + 3e-9 + 0.12 * mp.illum, 0.1 * sk + 4e-9 + 0.15 * mp.illum],
+  }, pe, hdr.h / 2 / Math.tan(fovY / 2), [hdr.w, hdr.h], time, 0.5 + clim.transport * 1.5 + clim.heat * 0.3);
   gl.depthMask(true);
   gl.disable(gl.DEPTH_TEST);
-  post.run(hdr, dt, time, 0.17, 0.045);
+  const shim = clim.heat * smooth(0.15, 0.5, sun[1]) * (1 - smooth(5, 11, clim.u10)); // mixing breaks up shimmer
+  post.run(hdr, dt, time, 0.17, 0.045, pe, shim, IVP, clim.heat * smooth(0.2, 0.5, sun[1]), mirC);
+
+  // wind at the listener: daily wind times the local gust field
+  const q = [cam.pos[0] - anchor[0], cam.pos[2] - anchor[1]], W = clim.dir;
+  const gst = 1 + 0.5 * gn((q[0] - W[0] * clim.u10 * time * 0.9) / 70, (q[1] - W[1] * clim.u10 * time * 0.9) / 70);
+  updateAudio(clim.u10 * gst * (cam.mode === 'fly' ? 1.4 : 1), Math.max(0, Math.min(1, (clim.ustar * gst - 0.21) / 0.15)));
 
   if (frames++ === 2 && !started) {
     $('go').disabled = false;
@@ -253,10 +326,15 @@ function frame(now) {
   }
   if (started) {
     $('clock').innerHTML = `<b>${hhmm(clock.hours)}</b>  ${clock.speed ? '×' + clock.speed : 'paused'}`;
+    if (frames % 15 === 0) {
+      const from = (Math.atan2(-clim.dir[0], clim.dir[1]) * 180) / Math.PI;
+      const pts = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+      $('wind').innerHTML = `wind <b>${clim.u10.toFixed(1)} m/s</b> from ${pts[Math.round(((from + 360) % 360) / 45) % 8]}  ·  sand <b>${Math.round(clim.tSurf)}°C</b>`;
+    }
     const deg = ((cam.yaw * 180) / Math.PI + 360) % 360;
     $('cstrip').style.transform = `translateX(${-((deg / 15) * 24 + 24 * 24) + $('compass').clientWidth / 2 - 12}px)`;
   }
-  window.__ret = { frames, cam, clock, sun: sp };
+  window.__ret = { frames, cam, clock, sun: sp, moon: mp, clim };
 }
 
 function boot() {
@@ -266,6 +344,8 @@ function boot() {
     terr = createTerrain(TOUCH ? 96 : 128);
     atm = createAtmosphere();
     post = createPost();
+    parts = createParticles(terr.N, 128, TOUCH ? 64 : 128);
+    clim = createClimate(windAngle);
   } catch (e) {
     $('err').textContent = e.message;
     $('err').classList.remove('hide');

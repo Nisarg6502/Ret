@@ -44,3 +44,27 @@ function mul3(a, b) {
     for (let r = 0; r < 3; r++) o[c * 3 + r] = a[r] * b[c * 3] + a[3 + r] * b[c * 3 + 1] + a[6 + r] * b[c * 3 + 2];
   return o;
 }
+
+// Moon: on the ecliptic, synodic month 29.53 days. Elongation from the sun sets phase and position.
+// MOON0 makes the default evening (day 172) a waxing gibbous moon rising before sunset.
+const EPS = 23.44 * D2R, MOON0 = 159.46;
+const raDec = (L) => [Math.atan2(Math.cos(EPS) * Math.sin(L), Math.cos(L)), Math.asin(Math.sin(EPS) * Math.sin(L))];
+export function moonPosition(latDeg, day, hours) {
+  const n = day + hours / 24, phi = latDeg * D2R;
+  const Ls = (n - 80.5) * 0.98565 * D2R;
+  const age = ((((n - MOON0) / 29.530589) % 1) + 1) % 1, el = age * 2 * Math.PI;
+  const Lm = Ls + el;
+  const [ras] = raDec(Ls), [ram, dec] = raDec(Lm);
+  const H = (hours - 12) * 15 * D2R + ras - ram;
+  const sinEl = Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(H);
+  const elev = Math.asin(Math.max(-1, Math.min(1, sinEl)));
+  const az = Math.atan2(-Math.sin(H) * Math.cos(dec), Math.cos(phi) * Math.sin(dec) - Math.sin(phi) * Math.cos(dec) * Math.cos(H));
+  const ce = Math.cos(elev);
+  // phase angle (sun-moon-observer) in degrees, illuminance relative to the sun (full moon ~2.1e-6)
+  const pa = Math.abs(180 - ((el * 180) / Math.PI + 360) % 360);
+  const illum = 2.1e-6 * Math.pow(10, -0.4 * (0.026 * pa + 4e-9 * pa ** 4));
+  return { dir: [Math.sin(az) * ce, sinEl, -Math.cos(az) * ce], elev, azim: az, age, illum };
+}
+
+// Celestial north pole in world coordinates (x east, y up, -z north).
+export const polarAxis = (latDeg) => [0, Math.sin(latDeg * D2R), -Math.cos(latDeg * D2R)];

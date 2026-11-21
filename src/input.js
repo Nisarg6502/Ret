@@ -19,7 +19,7 @@ export function initInput(canvas, handlers) {
     if (e.repeat) return;
     const k = e.code;
     if (k === 'Space') once.add('jump');
-    const map = { KeyV: 'fly', KeyC: 'camera', KeyH: 'hud', KeyF: 'fullscreen', KeyM: 'mute', BracketRight: 'faster', BracketLeft: 'slower', Backslash: 'pause', KeyP: 'photo' };
+    const map = { KeyV: 'fly', KeyC: 'camera', KeyH: 'hud', KeyF: 'fullscreen', KeyM: 'mute', BracketRight: 'faster', BracketLeft: 'slower', Backslash: 'pause', KeyP: 'photo', KeyT: 'skip' };
     if (map[k]) actions.action?.(map[k]);
     if (k.startsWith('Arrow') || k === 'Space') e.preventDefault();
   });
@@ -98,6 +98,7 @@ export function initInput(canvas, handlers) {
   btn('bJump', () => once.add('jump'));
   btn('bFly', () => actions.action?.('fly'));
   btn('bTime', () => actions.action?.('cycletime'));
+  btn('bSkip', () => actions.action?.('skip'));
   btn('bTilt', () => toggleGyro());
 }
 
@@ -164,7 +165,8 @@ export function poll(dt) {
     if (edge(3)) actions.action?.('camera');
     if (edge(2)) actions.action?.('fly');
     if (edge(9)) actions.action?.('cycletime');
-    for (const i of [0, 2, 3, 9]) q[i] = b(i);
+    if (edge(1)) actions.action?.('skip');
+    for (const i of [0, 1, 2, 3, 9]) q[i] = b(i);
   }
   Object.assign(state, { mx, mz, run, jump });
   once.clear();
