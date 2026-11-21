@@ -19,6 +19,15 @@ See [PLAN.md](PLAN.md) for the full design and the milestone plan.
   interdune floors.
 - **Sand** with wind ripples across the wind, darker heavy minerals in ripple troughs, grain
   flow on slip faces, the bright "opposition" glow away from the sun, and sparkling quartz grains.
+- **Night**: a moon with real phases and orbit that lights the sand silver and scatters moonlight
+  into the sky, the planet's ring system (lit by the sun, with the planet's shadow across it and a
+  seasonal ring shadow on the ground), the Milky Way, stars, airglow and night-adapted vision.
+- **Alive**: one climate model couples sun, heat and wind. Wind follows a daily cycle with gusts
+  that travel across the dunes; sand only moves above the real transport threshold, streaming in
+  sheets over windward slopes and flung off crests; dust motes drift; dust devils rise on hot calm
+  afternoons; clouds drift and cast shadows; heat shimmer near the horizon; ripples creep downwind.
+- **Sound**: wind that follows speed and gusts, a whistle whose pitch rises with wind speed, sand
+  hiss when grains are moving, footsteps. M mutes.
 - **Endless terrain** streamed with geometry clipmaps out to about 16 km, with soft sun shadows
   and Earth curvature.
 - **Controls** for keyboard and mouse, touch (floating joystick, drag to look, optional gyro)
@@ -34,7 +43,7 @@ See [PLAN.md](PLAN.md) for the full design and the milestone plan.
 | Jump | Space | JUMP | A |
 | Free flight | V | FLY | X |
 | Time faster / slower / pause | ] / [ / \ | TIME cycles speeds | Start |
-| Hide HUD / fullscreen | H / F | | |
+| Hide HUD / fullscreen / mute | H / F / M | | |
 
 URL options (after `#`, joined with `&`): `s=` world seed, `t=` solar time in hours,
 `d=` day of year, `lat=` latitude, `dust=` dust optical depth, `speed=` time multiplier,

@@ -26,9 +26,9 @@ void main(){
 }
 #endif
 #ifdef DOWN
-uniform sampler2D uSrc,uExp;uniform vec2 uTx;uniform float uFirst,uKey;in vec2 vUv;out vec4 o;
+uniform sampler2D uSrc,uExp;uniform vec2 uTx;uniform float uFirst,uKey,uPE;in vec2 vUv;out vec4 o;
 vec3 t(vec2 d){vec3 c=texture(uSrc,vUv+d*uTx).rgb;
-  if(uFirst>0.){c*=clamp(uKey/exp2(texelFetch(uExp,ivec2(0),0).x),.05,3e7);float l=dot(c,vec3(.3333));c*=min(1.,60./max(l,1e-6));}
+  if(uFirst>0.){c*=clamp(uKey/exp2(texelFetch(uExp,ivec2(0),0).x-log2(uPE)),.05,3e7)/uPE;float l=dot(c,vec3(.3333));c*=min(1.,60./max(l,1e-6));}
   return c;}
 void main(){o=vec4((t(vec2(0))*4.+t(vec2(-1,-1))+t(vec2(1,-1))+t(vec2(-1,1))+t(vec2(1,1)))/8.,1);}
 #endif
@@ -51,13 +51,25 @@ vec3 agx(vec3 v){
   return mat3(1.19687900512017,-.0528968517574562,-.0529716355144438,-.0980208811401368,1.15190312990417,
               -.0980434501171241,-.0990297440797205,-.0989611768448433,1.15107367264116)*v;
 }
+uniform highp sampler2D uDepth;uniform mat4 uIVP;uniform float uPE,uShim;
 void main(){
-  float a=texelFetch(uExp,ivec2(0),0).x,e=clamp(uKey/exp2(a),.05,3e7);
-  vec3 c=texture(uSrc,vUv).rgb*e+texture(uBloom,vUv).rgb*uBloomK;
-  // night vision: as adaptation falls toward rod (scotopic) levels, colour fades to a dim blue
-  float n=1.-smoothstep(-24.,-13.,a);
+  // heat shimmer: hot air over the ground bends low grazing rays; strongest near the horizon,
+  // over distant ground, on hot afternoons
+  vec2 uv=vUv;
+  if(uShim>0.){
+    vec4 w=uIVP*vec4(vUv*2.-1.,1,1);float dy=normalize(w.xyz/w.w).y;
+    float z=texture(uDepth,vUv).x*2.-1.,d=.3/max(1.-z,1e-7);
+    float k=uShim*smoothstep(60.,500.,d)*(1.-smoothstep(0.,.09,abs(dy+.01)))*step(z,.99999);
+    uv.y+=k*.0016*sin(vUv.y*780.+uTime*9.+3.*sin(vUv.x*140.+uTime*2.3));
+    uv.x+=k*.0007*sin(vUv.y*510.-uTime*6.);
+  }
+  // a is log2 of the scene's average luminance in physical units (the HDR buffer is pre-exposed)
+  float a=texelFetch(uExp,ivec2(0),0).x-log2(uPE),e=clamp(uKey/exp2(a),.05,3e7)/uPE;
+  vec3 c=texture(uSrc,uv).rgb*e+texture(uBloom,vUv).rgb*uBloomK;
+  // night vision: toward rod (scotopic) adaptation colour fades into a dim silvery blue
+  float n=.78*(1.-smoothstep(-26.,-15.,a));
   float ls=dot(c,vec3(.06,.6,.34));
-  c=mix(c,ls*vec3(.5,.68,1.)*.55,n);
+  c=mix(c,ls*vec3(.58,.72,1.)*.62,n);
   c=agx(c);
   vec2 d=vUv-.5;c*=1.-.28*dot(d,d)*dot(d,d)*4.;
   uint h=uint(gl_FragCoord.x)*1973u+uint(gl_FragCoord.y)*9277u+uint(uTime*60.)*26699u;h=(h^(h>>13))*1274126177u;

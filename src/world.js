@@ -157,3 +157,12 @@ export function ground(x, z) {
   return fx > fz ? h00 + (h10 - h00) * fx + (h11 - h10) * fz : h00 + (h01 - h00) * fz + (h11 - h01) * fx;
 }
 export function resetGroundCache() { cx = cz = NaN; }
+
+// Ring optical depth at radius r (planet radii). Twin of ringTau() in glsl/sky.glsl.
+export function ringTau(r) {
+  const x = (r - 1.85) / 0.4;
+  if (x < 0 || x > 1) return 0;
+  const t = 0.12 + 0.6 * sstep(0.05, 0.35, x) - 0.55 * sstep(0.56, 0.6, x) * (1 - sstep(0.65, 0.7, x)) +
+    0.22 * gn(x * 38, 0.5) + 0.1 * gn(x * 210, 2.5);
+  return Math.max(t, 0) * sstep(0, 0.04, x) * (1 - sstep(0.93, 1, x));
+}

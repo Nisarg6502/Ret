@@ -1,4 +1,5 @@
 // Aerial perspective volume, 32x32x32 over the view frustum, depth = sqrt(d/32km).
+// Lit by the key light (sun, or the moon at night); the caller scales by its illuminance.
 uniform mat4 uIVP;uniform vec3 uSun;uniform float uR,uSlice;
 out vec4 o;
 void main(){

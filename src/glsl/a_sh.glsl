@@ -12,7 +12,7 @@ void main(){
     c+=L*(k==0?.282095:k==1?.488603*D.y:k==2?.488603*D.z:.488603*D.x);
   }
   float w=6.2831853/128.;E*=w;c*=w;
-  vec3 Es=tr(uR,uSun.y)*limb(uR,uSun.y)*max(uSun.y,0.);
+  vec3 Es=tr(uR,uSun.y)*limb(uR,uSun.y)*max(uSun.y,0.)*uSunK+tr(uR,uMoon.y)*limb(uR,uMoon.y)*max(uMoon.y,0.)*uMoonE;
   vec3 Lg=uAlb*.3183099*(Es+E);
   if(k==0)c+=Lg*.282095*6.2831853;
   if(k==1)c-=Lg*.488603*PI;

@@ -9,6 +9,7 @@ import gradFS from './glsl/t_grad.glsl';
 import shadowFS from './glsl/t_shadow.glsl';
 import vertVS from './glsl/t_vert.glsl';
 import fragFS from './glsl/t_frag.glsl';
+import cloud from './glsl/cloud.glsl';
 
 export const LV = 9;
 const mod = (a, n) => ((a % n) + n) % n;
@@ -19,7 +20,7 @@ export function createTerrain(G = 128) {
   const pGen = program(FS_VS, noise + height + genFS, defs);
   const pGrad = program(FS_VS, gradFS, defs);
   const pShadow = program(FS_VS, shadowFS, defs);
-  const pDraw = program(vertVS, noise + atmo + fragFS, defs);
+  const pDraw = program(vertVS, noise + atmo + cloud + fragFS, defs);
   const progs = [pGen, pGrad, pShadow, pDraw];
 
   const arr = (ifmt, fmt, type, filter) => texture([N, N, LV], ifmt, fmt, type, filter, gl.REPEAT, 'array');
@@ -151,5 +152,7 @@ export function createTerrain(G = 128) {
     gl.bindVertexArray(null);
   }
 
-  return { update, draw, progs, N, G };
+  // sampling info for a level (used by the particle simulation to find the ground)
+  const level = (l) => ({ hTex, gTex, aTex, o: lv[l].o, om: [mod(lv[l].o[0], N), mod(lv[l].o[1], N)] });
+  return { update, draw, progs, N, G, level, anchor: () => anchor };
 }
