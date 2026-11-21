@@ -11,7 +11,7 @@ export function createPost() {
   const adapt = [target(1, 1, [rg]), target(1, 1, [rg])];
   let cur = 0, bloom = [], bw = 0, bh = 0, first = true;
 
-  function run(hdr, dt, time, key, bloomK, pe, shim, ivp) {
+  function run(hdr, dt, time, key, bloomK, pe, shim, ivp, mir = 0, mirC = 0) {
     if (hdr.w !== bw || hdr.h !== bh) {
       bloom.forEach((t) => t.free());
       bw = hdr.w;
@@ -49,7 +49,7 @@ export function createPost() {
     }
     gl.disable(gl.BLEND);
     bindTarget(null);
-    pFinal.use({ uSrc: hdr.tex[0], uBloom: bloom[0].tex[0], uExp: ex, uTime: time, uKey: key, uBloomK: bloomK, uPE: pe, uShim: shim, uIVP: ivp, uDepth: hdr.depth });
+    pFinal.use({ uSrc: hdr.tex[0], uBloom: bloom[0].tex[0], uExp: ex, uTime: time, uKey: key, uBloomK: bloomK, uPE: pe, uShim: shim, uIVP: ivp, uDepth: hdr.depth, uMir: mir, uMirC: mirC });
     fullscreen();
   }
   return { run, progs: [pLum, pRed, pAdapt, pDown, pUp, pFinal] };

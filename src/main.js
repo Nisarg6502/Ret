@@ -4,7 +4,7 @@ import { createTerrain } from './terrain.js';
 import { createAtmosphere } from './atmosphere.js';
 import { createPost } from './post.js';
 import { initInput, enableInput, poll, state } from './input.js';
-import { sunPosition, celestialMatrix, moonPosition, polarAxis } from './sun.js';
+import { sunPosition, celestialMatrix, moonPosition, polarAxis, declination } from './sun.js';
 import { setWorld, terrain, ground, wind, gn, ringTau } from './world.js';
 import { viewProj, inv4, clamp, rng, basis, smooth } from './math.js';
 import { createClimate } from './climate.js';
@@ -30,7 +30,8 @@ const windAngle = R() * Math.PI * 2;
 setWorld(seed, windAngle);
 const WIND = wind();
 const clock = { day: num('d', 172), hours: num('t', 17.9), lat: num('lat', 23.5), speed: num('speed', SHOT ? 0 : 30) };
-const SPEEDS = [0, 1, 10, 30, 120, 600];
+const SPEEDS = [0, 1, 10, 30, 120, 600, 1800, 3600];
+let shadowBoost = 0;
 const DUST = Q.dust !== undefined ? num('dust', 0.09) : null; // fixed dust if given, else from the climate
 const EYE = 1.65;
 
@@ -98,7 +99,8 @@ function action(a) {
     i = a === 'faster' ? Math.min(i + 1, SPEEDS.length - 1) : a === 'slower' ? Math.max(i - 1, 0) : (i + 1) % SPEEDS.length;
     clock.speed = SPEEDS[i];
     toast(clock.speed ? `Time ×${clock.speed}` : 'Time paused');
-  } else if (a === 'pause') {
+  } else if (a === 'skip') skipTime();
+  else if (a === 'pause') {
     clock.speed = clock.speed ? 0 : 30;
     toast(clock.speed ? 'Time ×30' : 'Time paused');
   } else if (a === 'mute') toast(toggleMute() ? 'Sound off' : 'Sound on');
@@ -106,11 +108,24 @@ function action(a) {
   else if (a === 'camera') toast('Third person arrives with the character milestone');
 }
 
+// Jump to the next notable moment of the day (sunrise and sunset from the declination).
+function skipTime() {
+  const phi = (clock.lat * Math.PI) / 180, dec = declination(clock.day);
+  const H0 = (Math.acos(clamp(-Math.tan(phi) * Math.tan(dec), -1, 1)) * 12) / Math.PI, rise = 12 - H0, set = 12 + H0;
+  const moments = [[rise + 0.3, 'Sunrise'], [rise + 1.6, 'Morning'], [12.5, 'Midday heat'], [15.2, 'Afternoon wind'],
+    [set - 0.8, 'Golden hour'], [set + 0.3, 'Dusk'], [23.5, 'Night']];
+  let next = moments.find(([h]) => h > clock.hours + 0.05);
+  if (!next) (next = moments[0]), (clock.day = (clock.day % 365) + 1);
+  clock.hours = next[0];
+  shadowBoost = 2;
+  toast(`${next[1]}  ${hhmm(next[0])}`);
+}
+
 function showHint() {
   toast(
     state.touch
-      ? 'Left thumb moves · right thumb looks · TILT for gyro look'
-      : 'WASD move · mouse look · Shift run · Space jump · V fly · [ ] time · H hide HUD',
+      ? 'Left thumb moves · right thumb looks · TIME speed · SKIP ahead · TILT gyro'
+      : 'WASD move · mouse look · Shift run · Space jump · V fly · [ ] time speed · T skip ahead · H hide HUD',
     7000
   );
 }
@@ -258,11 +273,16 @@ function frame(now) {
   const VP = viewProj(cam.yaw, cam.pitch, fovY, aspect, 0.15, 150000);
   const IVP = inv4(VP);
 
-  terr.update(cam.pos, keyDir, seed, WIND, frames === 0 ? 9 : 1);
+  terr.update(cam.pos, keyDir, seed, WIND, frames === 0 || shadowBoost-- > 0 ? 9 : clock.speed >= 600 ? 3 : 1);
   const u = atm.update(sun, moon, sunK, mp.illum, cam.pos[1], dust, IVP, keyMoon);
   const anchor = terr.anchor();
   parts.update(dt, cam.pos, terr.level(0), terr.level(1), anchor, clim, time, seed);
   const cloudU = { uCOff: clim.cloudOff, uCamKm: [cam.pos[0] / 1000, cam.pos[2] / 1000], uCCov: clim.cloudCov };
+
+  // mirage: critical angle from the refractive index difference (Gladstone-Dale) between the air
+  // touching the ground and the air at eye height
+  const dn = 2.93e-4 * 273.15 * (1 / (clim.tAir + 273.15) - 1 / (clim.tSurf + 273.15));
+  const mirC = Math.sqrt(2 * Math.max(dn, 0)) * 3.5; // drawn ~3.5x the physical angle so it reads on screens
 
   bindTarget(hdr);
   gl.enable(gl.DEPTH_TEST);
@@ -271,7 +291,7 @@ function frame(now) {
   gl.clear(gl.DEPTH_BUFFER_BIT);
   terr.draw(VP, cam.pos, {
     ...u, ...cloudU, uRes: [hdr.w, hdr.h], uWind: WIND, uSeed: seed, uKey: keyMoon ? 1 : 0, uPE: pe,
-    uWd: clim.dir, uU10: clim.u10, uUs: clim.ustar, uTime: time, uRip: clim.ripple,
+    uWd: clim.dir, uU10: clim.u10, uUs: clim.ustar, uTime: time, uRip: clim.ripple, uMirC: mirC,
   });
   gl.depthMask(false);
   atm.drawSky(IVP, {
@@ -293,7 +313,7 @@ function frame(now) {
   gl.depthMask(true);
   gl.disable(gl.DEPTH_TEST);
   const shim = clim.heat * smooth(0.15, 0.5, sun[1]) * (1 - smooth(5, 11, clim.u10)); // mixing breaks up shimmer
-  post.run(hdr, dt, time, 0.17, 0.045, pe, shim, IVP);
+  post.run(hdr, dt, time, 0.17, 0.045, pe, shim, IVP, clim.heat * smooth(0.2, 0.5, sun[1]), mirC);
 
   // wind at the listener: daily wind times the local gust field
   const q = [cam.pos[0] - anchor[0], cam.pos[2] - anchor[1]], W = clim.dir;

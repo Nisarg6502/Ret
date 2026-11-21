@@ -6,7 +6,7 @@ in vec3 vRel;in vec2 vQ,vT0,vT1;in float vM,vH;
 uniform highp sampler2DArray uA,uGr,uSh;
 uniform int uL,uLast;uniform vec4 uFine;
 uniform sampler2D uSH;uniform highp sampler3D uAP;
-uniform vec3 uSun,uMoon;uniform float uR,uSunK,uMoonE,uKeyE,uPE,uU10,uUs,uTime,uRip;uniform int uKey;
+uniform vec3 uSun,uMoon;uniform float uR,uSunK,uMoonE,uKeyE,uPE,uU10,uUs,uTime,uRip,uMirC;uniform int uKey;
 uniform vec2 uRes,uWind,uWd;
 out vec4 o;
 vec3 irr(vec3 n){
@@ -122,5 +122,7 @@ void main(){
     }
   }
   vec4 ap=texture(uAP,vec3(gl_FragCoord.xy/uRes,sqrt(dist/32000.)));
-  o=vec4(min((col*ap.a+ap.rgb*uKeyE)*uPE,vec3(6e4)),1);
+  // alpha: 1 - mirage eligibility (line of sight grazing this surface below the critical angle)
+  float mel=(1.-smoothstep(uMirC*.8,uMirC*1.1,dot(V,N0)))*smoothstep(100.,600.,dist);
+  o=vec4(min((col*ap.a+ap.rgb*uKeyE)*uPE,vec3(6e4)),1.-mel);
 }

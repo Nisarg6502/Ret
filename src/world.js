@@ -80,32 +80,58 @@ function dunes(px, pz, lam, H, S, g0, sd, tr, lmin, gH) {
 const hf = (x, y) => (hsh(x, y) >>> 8) / 16777216;
 // Star dunes (twin of star() in height.glsl).
 function star(px, pz, Hm, gH) {
-  const cx = Math.floor(px / 1500), cz = Math.floor(pz / 1500);
+  const cx = Math.floor(px / 1800), cz = Math.floor(pz / 1800);
   let h = 0;
   for (let j = -1; j <= 1; j++)
     for (let i = -1; i <= 1; i++) {
       const kx = cx + i, kz = cz + j, q = hsh(kx + 7001, kz + 9113);
-      const dx = px - (kx + 0.25 + (0.5 * (q & 255)) / 255) * 1500;
-      const dz = pz - (kz + 0.25 + (0.5 * ((q >>> 8) & 255)) / 255) * 1500;
-      const H = Hm * (0.55 + (0.6 * ((q >>> 16) & 255)) / 255), L = H / 0.24;
-      const R = 8.2 * H + 40;
+      if ((q & 3) === 0) continue;
+      const dx = px - (kx + 0.2 + (0.6 * ((q >>> 3) & 255)) / 255) * 1800;
+      const dz = pz - (kz + 0.2 + (0.6 * ((q >>> 11) & 255)) / 255) * 1800;
+      const H = Hm * (0.5 + (0.6 * ((q >>> 19) & 255)) / 255), L = H / 0.24;
+      const R = 8.2 * H + 120;
       if (dx * dx + dz * dz > R * R) continue;
-      const a0 = ((q >>> 24) / 255) * 6.2831853;
-      for (let m = 0; m < 4; m++) {
-        const an = a0 + m * 1.5707963 + 0.6 * (hf(kx + m * 31, kz + 77) - 0.5);
+      const rb = Math.min(2 * L, 1400), db = Math.hypot(dx, dz) / rb, hb = db < 1 ? 0.2 * H * (1 - db) * (1 - db) : 0;
+      const na = 2 + ((q >>> 27) & 1) + ((q >>> 28) & 1) + ((q >>> 2) & 1), a0 = (q >>> 29) * 0.785398 + hf(kx + 5, kz + 5);
+      let ha = 0;
+      for (let m = 0; m < na; m++) {
+        const r1 = hf(kx + m * 31, kz + 77), r2 = hf(kx + m * 31, kz + 78), r3 = hf(kx + m * 31, kz + 79);
+        const an = a0 + (m * 6.2831853) / na + 0.9 * (r1 - 0.5);
         const ax = Math.cos(an), az = Math.sin(an);
-        const a = Math.abs(dx * ax + dz * az), t = 1 - a / L;
+        const La = L * 1.35 * (0.95 + 0.45 * r2), Hc = H * (0.7 + 0.3 * r3), a = dx * ax + dz * az;
+        const ae = a < 0 ? -a * 1.3 : a, t = 1 - ae / La;
         if (t <= 0) continue;
-        const b = -dx * az + dz * ax + 28 * gn(dx * 0.0025 + m * 7, dz * 0.0025) + ((a * a) / L) * 0.25 * (hf(kx + m * 31, kz + 78) - 0.5);
-        const u = (Math.abs(b) * Math.max(0.5 - H * gH, 0.2)) / (1.5 * H * t);
-        if (u < 1) h = Math.max(h, H * t * Math.pow(1 - u, 1.5));
+        const hc = Hc * Math.pow(t, 1.35) * (1 + 0.08 * gn(ae / 450, m * 3.7 + r3 * 9));
+        const b = -dx * az + dz * ax + 70 * gn(dx * 0.0017 + m * 7, dz * 0.0017) + 22 * gn(dx * 0.006, dz * 0.006 + m * 5) +
+          ((ae * ae) / La) * 0.4 * (r1 - 0.5);
+        const cs = Math.max((b > 0 === r2 > 0.5 ? 0.38 : 0.38 * (0.5 + 0.5 * r3)) - H * gH, 0.19);
+        const u = (Math.abs(b) * cs) / (1.5 * hc);
+        if (u < 1) ha = Math.max(ha, hc * Math.pow(1 - u, 1.5));
       }
+      h = Math.max(h, ha + hb);
     }
+  return h;
+}
+// Linear (seif) dunes (twin of seif() in height.glsl).
+function seif(px, pz, H0, gH) {
+  const u = px * WX + pz * WZ, v = -px * WZ + pz * WX;
+  const w = 170 * gn(u / 2600, 3.1) + 55 * gn(u / 800, 8.7);
+  const dw = (170 * gn((u + 20) / 2600, 3.1) + 55 * gn((u + 20) / 800, 8.7) - w) / 20;
+  const gp = Math.sqrt(1 + dw * dw), vv = (v + w) / 1600, k0 = Math.floor(vv + 0.5);
+  let h = 0;
+  for (let i = -1; i <= 1; i++) {
+    const k = k0 + i, d = (vv - k) * 1600;
+    const Hr = H0 * (0.5 + 0.5 * gn(u / 2600, k * 7.31)) * sstep(-0.5, 0.15, gn(u / 7000, k * 3.17 + 1));
+    if (Hr <= 0) continue;
+    const s = gn(u / 1500, k * 5.71 + 2);
+    const W = ((2.4 * Hr * gp) / Math.max(0.53 - Hr * gH, 0.3)) * (1 + 0.9 * Math.max(d > 0 ? s : -s, 0)), x = Math.abs(d) / W;
+    if (x < 1) h = Math.max(h, Hr * Math.pow(1 - x, 2.4));
+  }
   return h;
 }
 const erg = (px, pz) =>
   sstep(-0.15, 0.25, 1.2 * gn(px / 16000 + 7.7, pz / 16000 + 7.7) + 0.5 * gn(px / 5200 + 1.3, pz / 5200 + 1.3) +
-    0.9 * Math.exp(-(px * px + pz * pz) / 3.6e7));
+    0.9 * Math.exp(-(px * px + pz * pz) / 3.6e7) + 0.9 * Math.exp(-((px + 10000) ** 2 + (pz - 5000) ** 2) / 8.1e7));
 const bl = (lam, s) => sstep(2.5, 5, lam / s);
 
 // Height in metres at world (x, z). s = sample spacing (1 = full detail). at = [rock, salt, red, supply]
@@ -114,18 +140,21 @@ export function terrain(px, pz, s = 1, at) {
   const E = erg(px, pz), gE = Math.hypot(erg(px + 8, pz) - E, erg(px, pz + 8) - E) / 8, gH = gE / Math.max(E, 1e-4);
   const S = clamp(0.55 + 0.9 * gn(px / 7000 + 3.3, pz / 7000 + 3.3), 0, 1);
   const P = sstep(0.3, 0.46, gn(px / 5500 + 21, pz / 5500 + 21) + 0.25 * gn(px / 1300 - 4, pz / 1300 - 4));
-  // wind regime: multidirectional (star dunes) where V -> 1; a star field surrounds the start
-  const V = sstep(0.05, 0.45, gn(px / 20000 + 61, pz / 20000 + 61) + 0.3 * gn(px / 7000 - 17, pz / 7000 - 17) + 0.8 * Math.exp(-(px * px + pz * pz) / 6.4e7));
+  // wind regime decides the dune form (twin of height.glsl)
+  const sx = px - 1500, sz = pz + 500, lx = px + 10000, lz = pz - 5000;
+  const V = sstep(0.05, 0.45, gn(px / 20000 + 61, pz / 20000 + 61) + 0.3 * gn(px / 7000 - 17, pz / 7000 - 17) + 0.8 * Math.exp(-(sx * sx + sz * sz) / 6.4e7));
+  const B = sstep(0.05, 0.45, gn(px / 18000 + 31, pz / 18000 + 31) + 0.3 * gn(px / 6000 - 9, pz / 6000 - 9) + 0.95 * Math.exp(-(lx * lx + lz * lz) / 8.1e7)) * (1 - V);
   const b1 = bl(1100, s), b2 = bl(110, s), b3 = bl(60, s);
   let mega = 0, small = 0, det = 0;
   const mH = 150 * E, mS = clamp(S + 0.35, 0, 1);
   let lw = 0;
   if (b1 > 0 && mH > 0) {
-    if (V < 1) (mega = dunes(px, pz, 1100, mH, mS, 0.05, 0, 0.6009, 0.15, gH)), (lw = LW);
+    if (V + B < 1) (mega = dunes(px, pz, 1100, mH, mS, 0.05, 0, 0.6009, 0.15, gH)), (lw = LW);
+    if (B > 0) mega = mega + (seif(px, pz, 150 * E, gH) - mega) * (B / Math.max(1 - V, 1e-4));
     if (V > 0) mega = mega + (star(px, pz, 230 * E, gH) - mega) * V;
     mega *= b1;
   }
-  const sH = (3 + 7 * S) * (0.45 + 0.55 * E), sk = (1 - lw * b1) * (1 - sstep(0, 0.3, V));
+  const sH = (3 + 7 * S) * (0.45 + 0.55 * E), sk = (1 - lw * b1) * (1 - sstep(0, 0.3, V)) * (1 - sstep(0, 0.3, B));
   if (b2 > 0 && sH > 0 && sk > 0) small = b2 * sk * dunes(px, pz, 110, sH, S, 0.4 * (1 - S), 5.3, 0.5543, 0.004, 0);
   if (b3 > 0) det = b3 * fbm(px / 70, pz / 70, 3);
   const sand = base + mega + small + 0.5 * det;
@@ -137,9 +166,10 @@ export function terrain(px, pz, s = 1, at) {
   if (at) {
     at[0] = sstep(0, 1.5, rk - sand);
     at[1] = P * (1 - sstep(0.4, 2.5, mega + small));
-    at[2] = clamp(0.45 + 0.7 * gn(px / 8000 + 40, pz / 8000 + 40) + 0.25 * E, 0, 1);
+    at[2] = clamp(0.45 + 0.7 * gn(px / 8000 + 40, pz / 8000 + 40) + 0.25 * E + 0.3 * B, 0, 1);
     at[3] = S;
     at[4] = V;
+    at[5] = B;
   }
   return Math.max(sand, rk);
 }
